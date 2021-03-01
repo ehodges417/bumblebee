@@ -14,6 +14,7 @@ setuptools.setup(
         'pint',
         'plotly',
         'scipy',
+        'ipytree',
     ],
     extras_require = {
         'tutorials':  ["jupyter"]
