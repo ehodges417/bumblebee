@@ -14,13 +14,15 @@ class RigidCollection(PlotObj):
     @classmethod
     def from_dict(cls, data):
 
+        collections = [RigidCollection.from_dict(node) for node in data['nodes'] if node['type'] == 'RigidCollection']
         bodies= [RigidBody.from_dict(node) for node in data['nodes'] if node['type'] == 'RigidBody']
         frames = [Frame.from_dict(node) for node in data['nodes'] if node['type'] == 'Frame']
 
-
         collection = cls(units=data['units'], name=data['name'], body_frame=frames[0])
 
-        collection.nodes = frames+bodies
+        collection.nodes = frames+bodies+collections
+        collection.init_rel_pose(collection.nodes)
+        collection.rel_pose.pop(collection.body_frame)
 
         return collection
 
@@ -34,6 +36,16 @@ class RigidCollection(PlotObj):
         self.body_frame = body_frame if body_frame else Frame(name='Body Frame')        
         self.add_node(self.body_frame)
 
+        self.rel_pose = {}
+
+    @property
+    def tf(self):
+        return self.body_frame.tf
+
+    @tf.setter
+    def tf(self, value):
+        self.body_frame.tf = value
+
     def bind(self, figure):
 
         for plot_obj in self.nodes:
@@ -41,6 +53,12 @@ class RigidCollection(PlotObj):
 
     def add(self, plot_obj):
         self.add_node(plot_obj)
+        self.init_rel_pose([plot_obj])
+
+    def init_rel_pose(self, nodes):
+        inv = self.body_frame.inv_tf.copy()
+        for node in nodes:
+            self.rel_pose[node] = inv @ node.tf
 
     def to_dict(self):
         return {
@@ -50,22 +68,41 @@ class RigidCollection(PlotObj):
             'nodes': [node.to_dict() for node in self.nodes],
         }
 
+    def duplicate(self, name=None):
+        new_collection = RigidCollection.from_dict(self.to_dict())
+        if name:
+            new_collection.name = name
+        return new_collection
+
     def translate(self, translation):
         
-        for plot_obj in self.nodes:
-            plot_obj.translate(translation)
+        self.body_frame.translate(translation)
+        self.update_children()
 
-    def _rotate(self, R, about='origin', sweep=True):
+    def _rotate(self, R, about, sweep):
 
-        for plot_obj in self.nodes:
-            plot_obj._rotate(R, sweep=True)
+        self.body_frame._rotate(R, about, sweep)
+        self.update_children()
+        self.body_frame.update_plot()
 
     def transform(self, matrix):
 
-        for plot_obj in self.nodes:
-            plot_obj.transform(matrix)
+        self.body_frame.transform(matrix)
+        self.update_children()
+
+    def update_children(self):
+
+        for node in self.nodes[1:]:
+            node.tf = self.body_frame.tf @ self.rel_pose[node]
+            node.update_plot()
+
+        self.body_frame.update_plot()
+
+    def update_plot(self):
+
+        self.update_children()
 
     def set_vis(self, vis):
         self.visibility = vis
         for plot_obj in self.nodes:
-            plot_obj.set_vis()
+            plot_obj.set_vis(vis)

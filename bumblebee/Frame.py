@@ -41,6 +41,11 @@ class Frame(PlotObj):
         for axis in self.axes:
             self.add_node(axis)
 
+    @property
+    def inv_tf(self):
+        Rt = self.tf[0:3,0:3].T
+        return np.r_[np.c_[Rt, -np.dot(Rt, self.tf[0:3,3])], [[0, 0, 0, 1]]]
+
     def bind(self, figure):
         for axis in self.axes:
             axis.bind(figure)

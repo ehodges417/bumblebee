@@ -1,6 +1,7 @@
 from ipytree import Node
 from scipy.spatial.transform import Rotation
 import json, re
+import uuid
 
 class PlotObj(Node):
     """
@@ -22,6 +23,7 @@ class PlotObj(Node):
         This assists in generating the part tree.
         """
         Node.__init__(self, **kwargs)
+        # self.uid = uuid.uuid4()
         self.opened = False #default to collapsed in tree
         self.visible = True #default to visible in plot
 
@@ -31,7 +33,7 @@ class PlotObj(Node):
     def plot(self): raise Exception('plot method not overriden in child class!')  
 
     # support scipy rotation inputs
-    def _rotate(self, R, about='origin', sweep=False): raise Exception('_rotate method not overriden in child class!')
+    def _rotate(self, R, about, sweep): raise Exception('_rotate method not overriden in child class!')
     def rotate_from_quat(self, *args, about='origin', sweep=False, **kwargs): 
         self._rotate(Rotation.from_quat(*args, **kwargs), about, sweep)
     def rotate_from_matrix(self, *args, about='origin', sweep=False, **kwargs): 
@@ -56,3 +58,10 @@ class PlotObj(Node):
             f.seek(0)
             f.write(text)
             f.truncate()
+
+    # Think this is handled by node class
+    # def __hash__(self):
+    #     return hash(self.uid)
+
+    # def __eq__(self, other):
+    #     return self.__class__ == other.__class__ and self.uid == other.uid

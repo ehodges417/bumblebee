@@ -43,6 +43,14 @@ class RigidBody(PlotObj):
         ))
         self.num_pts = mesh.vectors.shape[0]*3
 
+    @property
+    def tf(self):
+        return self.body_frame.tf
+
+    @tf.setter
+    def tf(self, value):
+        self.body_frame.tf = value
+
     def bind(self, figure):
         figure.add_trace(self.plot_body())
         self.trace = figure.data[-1]
