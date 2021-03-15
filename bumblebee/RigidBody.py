@@ -3,27 +3,61 @@ import pint
 import numpy as np
 import plotly.graph_objects as go
 import modern_robotics as mr
-from stl.stl import BaseStl
-from stl.base import BaseMesh
+from stl.mesh import Mesh
 from ipytree import Node
 
 from bumblebee.Frame import Frame
 from bumblebee.PlotObj import PlotObj
 
-class RigidBody(BaseStl, PlotObj):
+class RigidBody(PlotObj):
+    """
+    A collection of a STL mesh and a number of named frames
+    which transform together as a unit.
+    """
 
-    def __init__(self, path, units='mm', name='RigidBody'):
-        BaseMesh.__init__(self, BaseStl.from_file(path).data)
+    @classmethod
+    def from_dict(cls, data):
+
+        frames = [Frame.from_dict(node) for node in data['nodes'] if node['type'] == 'Frame']
+        body = cls(data['mesh'], units=data['units'], name=data['name'], body_frame=frames[0])
+        body.nodes = frames
+        return body
+
+    def __init__(self, path, units='mm', name='RigidBody', body_frame:Frame = None):
+        self.init_points(Mesh.from_file(path))
         self.path = path
         self.name = name
         self.units = pint.Unit(units)
-        self.shape = self.vectors.shape
 
-        self.node = Node(name=name, icon='cube')
-        self.node.uids = []
-        self.body_frame = Frame(name='Body Frame')
-        self.node.add_node(self.body_frame.node)
-        self.frames = {}
+        PlotObj.__init__(self, name=name, icon='cube')
+        
+        self.body_frame = body_frame if body_frame else Frame(name='Body Frame')        
+        self.add_node(self.body_frame)
+
+    def init_points(self, mesh):
+        self.pts = np.vstack((
+            np.concatenate(mesh.x),
+            np.concatenate(mesh.y),
+            np.concatenate(mesh.z),
+            np.ones(mesh.x.size)
+        ))
+        self.num_pts = mesh.vectors.shape[0]*3
+
+    def bind(self, figure):
+        figure.add_trace(self.plot_body())
+        self.trace = figure.data[-1]
+
+        for frame in self.nodes:
+            frame.bind(figure)
+
+    def to_dict(self):
+        return {
+            'type': 'RigidBody',
+            'name': self.name,
+            'mesh': self.path,
+            'units': f'{self.units:~}',
+            'nodes': [node.to_dict() for node in self.nodes],
+        }
 
     def scale(self, scale_factor:float, fp:np.array=None):
         """
@@ -45,66 +79,76 @@ class RigidBody(BaseStl, PlotObj):
 
         self.scale(conversion)
 
-    def translate(self, translation):
-        
-        super().translate(translation)
-        
-        tf = mr.RpToTrans(np.eye(3),translation)
+    def duplicate(self, inplace=False, name='RigidBody'):
+        newbody = RigidBody(self.path, self.units, name)
+        if inplace:
+            newbody.body_frame.tf = self.body_frame.tf.copy()
 
-        self.body_frame.tf = self.body_frame.tf @ tf
-        for name, frame in self.frames.items():
-            self.frames[name].tf = frame.tf @ tf
+        return newbody
+
+    def translate(self, translation):
+
+        # translate attached frames
+        for frame in self.nodes:
+            frame.translate(translation)
+
+        self.update_plot()
+
+    def _rotate(self, R, about='origin', sweep=False):
+        for frame in self.nodes:
+            frame._rotate(R, about, sweep)
+
+        self.update_plot()
 
     def transform(self, matrix):
 
-        super().transform(matrix)
+        # translate attached frames
+        for frame in self.nodes:
+            frame.transform(matrix)
 
-        self.body_frame = matrix @ self.body_frame
-        for name, frame in self.frames.items():
-            self.frames[name] = matrix @ frame.tf
+        self.update_plot()
 
     def add_frame(self, frame:Frame):
-        self.frames[frame.node.name] = frame
-        self.node.add_node(frame.node)
-
-    def plot_frame(self, name):
-        return self.frames[name].plot()
-
-    def plot_frames(self):
-        return [vector for frame in self.frames.values() for vector in frame.plot()]
-
-    def plot_origin(self):
-        return self.body_frame.plot()
+        self.add_node(frame)
 
     def plot_body(self, colorscale=None):
 
-        if colorscale is None: 
-            colorscale=[0, 'rgb(153, 153, 153)'], [1., 'rgb(255,255,255)']
+        pts = self.body_frame.tf @ self.pts
 
         return go.Mesh3d(
-            x=np.concatenate(self.x),
-            y=np.concatenate(self.y),
-            z=np.concatenate(self.z),
-            colorscale=colorscale, 
-            intensity= np.concatenate(self.z),
+            x=pts[0],
+            y=pts[1],
+            z=pts[2],
+            colorscale=colorscale if colorscale else ([0, 'rgb(153, 153, 153)'], [1., 'rgb(255,255,255)']), 
+            intensity= pts[2],
             flatshading=True,
-            i = list(range(0,self.shape[0]*3,3)),
-            j = list(range(1,self.shape[0]*3,3)),
-            k = list(range(2,self.shape[0]*3,3)),
+            i = list(range(0,self.num_pts,3)),
+            j = list(range(1,self.num_pts,3)),
+            k = list(range(2,self.num_pts,3)),
             name=self.name,
             showscale=False,
-            lighting=dict(ambient=0.18,
-                                diffuse=1,
-                                fresnel=0.1,
-                                specular=1,
-                                roughness=0.05,
-                                facenormalsepsilon=1e-15,
+            lighting=dict(ambient=0.18, diffuse=1, fresnel=0.1, specular=1, roughness=0.05, facenormalsepsilon=1e-15,
                                 vertexnormalsepsilon=1e-15),
-            lightposition=dict(x=100,
-                                y=200,
-                                z=0
-                                )
         )
+    
+    def set_vis(self, vis):
+        self.visible = vis
 
-    def plot(self):       
-        return self.plot_frames() + self.plot_origin() + [self.plot_body()]
+        # set visibility of body mesh
+        if hasattr(self, 'trace'):
+            self.trace.visible = vis
+
+        # set visiblity of attached frames
+        for frame in self.nodes:
+            frame.set_vis(vis)
+
+    def update_plot(self):
+        
+        if hasattr(self, 'trace'):
+            pts = self.body_frame.tf @ self.pts
+            self.trace.x = list(pts[0])
+            self.trace.y = list(pts[1])
+            self.trace.z = list(pts[2])
+
+        for frame in self.nodes:
+            frame.update_plot()

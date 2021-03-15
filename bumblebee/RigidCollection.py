@@ -6,38 +6,66 @@ from bumblebee.PlotObj import PlotObj
 from bumblebee.Frame import Frame
 
 class RigidCollection(PlotObj):
+    """
+    A collection of RigidBody and Frame objects that
+    are transformed as a single unit.
+    """
 
-    def __init__(self, units='mm', name='RigidCollection'):
+    @classmethod
+    def from_dict(cls, data):
+
+        bodies= [RigidBody.from_dict(node) for node in data['nodes'] if node['type'] == 'RigidBody']
+        frames = [Frame.from_dict(node) for node in data['nodes'] if node['type'] == 'Frame']
+
+
+        collection = cls(units=data['units'], name=data['name'], body_frame=frames[0])
+
+        collection.nodes = frames+bodies
+
+        return collection
+
+    def __init__(self, units='mm', name='RigidCollection', body_frame:Frame = None):
 
         self.name = name
         self.units = pint.Unit(units)
 
-        self.node = Node(name=name, icon='cubes')
-        self.body_frame = Frame(name='Collection Frame')
-        self.node.add_node(self.body_frame.node)
-        self.bodies = {}
-        self.frames = {}
+        PlotObj.__init__(self, name=name, icon='cubes')
+        
+        self.body_frame = body_frame if body_frame else Frame(name='Body Frame')        
+        self.add_node(self.body_frame)
 
-    def translate(self):
-        pass
+    def bind(self, figure):
 
-    def rotate(self):
-        pass
+        for plot_obj in self.nodes:
+            plot_obj.bind(figure)
 
-    def transform(self):
-        pass
+    def add(self, plot_obj):
+        self.add_node(plot_obj)
 
-    def add_frame(self):
-        pass
+    def to_dict(self):
+        return {
+            'type': 'RigidCollection',
+            'name': self.name,
+            'units': f'{self.units:~}',
+            'nodes': [node.to_dict() for node in self.nodes],
+        }
 
-    def add_body(self):
-        pass
+    def translate(self, translation):
+        
+        for plot_obj in self.nodes:
+            plot_obj.translate(translation)
 
-    def plot_frames(self):
-        pass
+    def _rotate(self, R, about='origin', sweep=True):
 
-    def plot_bodies(self):
-        pass
+        for plot_obj in self.nodes:
+            plot_obj._rotate(R, sweep=True)
 
-    def plot(self):
-        pass
+    def transform(self, matrix):
+
+        for plot_obj in self.nodes:
+            plot_obj.transform(matrix)
+
+    def set_vis(self, vis):
+        self.visibility = vis
+        for plot_obj in self.nodes:
+            plot_obj.set_vis()

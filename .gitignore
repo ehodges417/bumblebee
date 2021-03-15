@@ -1,0 +1,13 @@
+# virtual environments
+env/
+
+# binary files
+*.pyc
+__pycache__/
+*.egg-info/
+
+#IDE configurations
+.vscode/
+
+#Documentation checkpoints
+.ipynb_checkpoints/

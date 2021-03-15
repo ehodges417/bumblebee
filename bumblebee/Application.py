@@ -4,7 +4,7 @@ from tkinter import filedialog as fd
 from ipywidgets import Button, HBox, VBox, Checkbox, ToggleButtons, FloatText, RadioButtons, Label, Tab
 from ipytree import Tree, Node
 
-from bumblebee.PlotWidget import PlotWidget
+from bumblebee.CSYS import CSYS
 from bumblebee.RigidBody import RigidBody
 
 class FileTab:
@@ -27,7 +27,7 @@ class FileTab:
         root.withdraw()                                        # Hide the main window.
         root.call('wm', 'attributes', '.', '-topmost', True)   # Raise the root to the top of all windows.
         path = fd.askopenfilename(filetypes=[("stl files","*.stl")])
-        self.parent.parent.plot_widget.add(RigidBody(path, name=path.split('/')[-1][:-4]))
+        self.parent.parent.csys.add(RigidBody(path, name=path.split('/')[-1][:-4]))
 
 
 class ViewTab:
@@ -87,13 +87,19 @@ class ToolTab:
 
     def toggle_vis(self, b):
 
-        for node in self.parent.parent.plot_widget.part_tree.selected_nodes:
-            for uid in node.uids:
-                loc = self.parent.parent.plot_widget.trace_registry[uid]
-
-                vis = self.parent.parent.plot_widget.fig.data[loc].visible
-                self.parent.parent.plot_widget.fig.data[loc].visible = not(vis)
-            
+        for node in self.parent.parent.csys.tree.selected_nodes:
+            if node.selected:
+                node.toggle_vis()
+            else:
+                self.walk_subtree(node)
+    
+    def walk_subtree(self, node):
+        
+        for node in node.nodes:
+            if node.selected:
+                node.toggle_vis()
+            elif hasattr(node, 'nodes'):
+                self.walk_subtree(node)         
 
 class Ribbon:
     #_____________________________
@@ -111,17 +117,17 @@ class Ribbon:
         for i, name in enumerate(['File','View','Move','Tools']):
             self.tabs.set_title(i, name)
 
-class AssemblyWidget:
+class Application:
 
     #__________________________
     #|_________Ribbon_________|
     #|                        |
-    #|        PlotWidget      |
+    #|        CSYS            |
     #|                        |
     #|________________________|
 
     def __init__(self):
         self.ribbon = Ribbon(self)
-        self.plot_widget = PlotWidget()
+        self.csys = CSYS()
 
-        self.grid = VBox([self.ribbon.tabs, self.plot_widget.plot()])
+        self.grid = VBox([self.ribbon.tabs, self.csys.plot()])
