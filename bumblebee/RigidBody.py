@@ -19,17 +19,17 @@ class RigidBody(PlotObj):
     def from_dict(cls, data):
 
         frames = [Frame.from_dict(node) for node in data['nodes'] if node['type'] == 'Frame']
-        body = cls(data['mesh'], units=data['units'], name=data['name'], body_frame=frames[0])
+        body = cls(data['mesh'], units=data['units'], name=data['name'], body_frame=frames[0], visible=data['visible'])
         body.nodes = frames
         return body
 
-    def __init__(self, path, units='mm', name='RigidBody', body_frame:Frame = None):
+    def __init__(self, path, units='mm', name='RigidBody', body_frame:Frame = None, visible=True):
         self.init_points(Mesh.from_file(path))
         self.path = path
         self.name = name
         self.units = pint.Unit(units)
 
-        PlotObj.__init__(self, name=name, icon='cube')
+        PlotObj.__init__(self, visible=visible, name=name, icon='cube')
         
         self.body_frame = body_frame if body_frame else Frame(name='Body Frame')        
         self.add_node(self.body_frame)
@@ -63,6 +63,7 @@ class RigidBody(PlotObj):
             'type': 'RigidBody',
             'name': self.name,
             'mesh': self.path,
+            'visible': self.visible,
             'units': f'{self.units:~}',
             'nodes': [node.to_dict() for node in self.nodes],
         }
@@ -123,7 +124,7 @@ class RigidBody(PlotObj):
 
         pts = self.body_frame.tf @ self.pts
 
-        return go.Mesh3d(
+        trace = go.Mesh3d(
             x=pts[0],
             y=pts[1],
             z=pts[2],
@@ -138,25 +139,35 @@ class RigidBody(PlotObj):
             lighting=dict(ambient=0.18, diffuse=1, fresnel=0.1, specular=1, roughness=0.05, facenormalsepsilon=1e-15,
                                 vertexnormalsepsilon=1e-15),
         )
+
+        trace.visible = self.visible
+        return trace
     
     def set_vis(self, vis):
         self.visible = vis
 
-        # set visibility of body mesh
-        if hasattr(self, 'trace'):
-            self.trace.visible = vis
+        if vis:
+            self.update_mesh()
 
         # set visiblity of attached frames
         for frame in self.nodes:
             frame.set_vis(vis)
 
+        # set visibility of body mesh
+        if hasattr(self, 'trace'):
+            self.trace.visible = vis
+
+    def update_mesh(self):
+        if self.visible:
+            if hasattr(self, 'trace'):
+                pts = self.body_frame.tf @ self.pts
+                self.trace.x = list(pts[0])
+                self.trace.y = list(pts[1])
+                self.trace.z = list(pts[2])
+
     def update_plot(self):
         
-        if hasattr(self, 'trace'):
-            pts = self.body_frame.tf @ self.pts
-            self.trace.x = list(pts[0])
-            self.trace.y = list(pts[1])
-            self.trace.z = list(pts[2])
+        self.update_mesh()
 
         for frame in self.nodes:
             frame.update_plot()

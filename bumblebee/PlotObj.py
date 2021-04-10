@@ -17,7 +17,7 @@ class PlotObj(Node):
 
         return cls.from_dict(data)
 
-    def __init__(self, **kwargs):
+    def __init__(self, visible=True, **kwargs):
         """
         Enforce inheritance from Node in child classes of PlotObj.
         This assists in generating the part tree.
@@ -25,7 +25,7 @@ class PlotObj(Node):
         Node.__init__(self, **kwargs)
         # self.uid = uuid.uuid4()
         self.opened = False #default to collapsed in tree
-        self.visible = True #default to visible in plot
+        self.visible = visible #default to visible in plot
 
     def set_vis(self, vis): raise Exception('set_vis method not overriden in child class!')
     def bind(self, figure): raise Exception('bind method not overriden in child class!')

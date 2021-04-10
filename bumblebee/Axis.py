@@ -15,7 +15,8 @@ class Axis(PlotObj):
         start,
         end,
         color,
-        linewidth = 6
+        linewidth = 6,
+        visible = True
     ):
         """
         Takes a start point and end point in 3D space
@@ -26,7 +27,7 @@ class Axis(PlotObj):
         self.color = color
         self.linewidth = linewidth
 
-        PlotObj.__init__(self, name=name, icon='line')
+        PlotObj.__init__(self, visible=visible, name=name, icon='line')
 
     def bind(self, figure):
         figure.add_trace(self.plot())
@@ -40,6 +41,7 @@ class Axis(PlotObj):
         marker = dict(size=1, color=self.color)
         line = dict(color=self.color, width=self.linewidth)
         trace = go.Scatter3d(x=x, y=y, z=z, marker=marker, line=line)
+        trace.visible = self.visible
         return trace
 
     def set_vis(self, vis):

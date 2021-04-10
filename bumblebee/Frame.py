@@ -13,7 +13,7 @@ class Frame(PlotObj):
 
     @classmethod
     def from_dict(cls, data):       
-        return cls(np.array(data['tf']), name=data['name'], scale=data['scale'], linewidth=data['linewidth'])
+        return cls(np.array(data['tf']), name=data['name'], scale=data['scale'], linewidth=data['linewidth'], visible=data['visible'])
 
     def __init__(
         self, 
@@ -24,6 +24,7 @@ class Frame(PlotObj):
         zcolor:str = 'rgb(0,0,128)',
         linewidth = 6,
         scale = 1,
+        visible=True
     ):
         """
         tf: 4x4 np.array transformation matrix
@@ -35,9 +36,9 @@ class Frame(PlotObj):
 
         origin, end_pts = self.axis_pts()
         colors = [xcolor, ycolor, zcolor]
-        self.axes = [Axis(name, origin, end_pts[i], colors[i], linewidth) for i, name in enumerate(['x-axis', 'y-axis', 'z-axis'])]
+        self.axes = [Axis(name, origin, end_pts[i], colors[i], linewidth, visible=visible) for i, name in enumerate(['x-axis', 'y-axis', 'z-axis'])]
         
-        PlotObj.__init__(self, name=name, icon='crosshairs')
+        PlotObj.__init__(self, visible=visible, name=name, icon='crosshairs')
         for axis in self.axes:
             self.add_node(axis)
 
@@ -54,6 +55,7 @@ class Frame(PlotObj):
         return {
             'type': 'Frame',
             'name': self.name,
+            'visible': self.visible,
             'tf': self.tf.tolist(),
             'linewidth': self.linewidth,
             'scale': self.scale,
@@ -98,14 +100,17 @@ class Frame(PlotObj):
     
     def set_vis(self, vis):
         self.visable = vis
+        if vis:
+            self.update_plot()
         for axis in self.axes:
             axis.set_vis(vis)
 
     def update_plot(self):
-        origin, end_pts = self.axis_pts()
+        if self.visible:
+            origin, end_pts = self.axis_pts()
         
-        for i, axis in enumerate(self.axes):
-            if hasattr(axis, 'trace'):
-                axis.start = origin
-                axis.end = end_pts[i]
-                axis.update_plot()
+            for i, axis in enumerate(self.axes):
+                if hasattr(axis, 'trace'):
+                    axis.start = origin
+                    axis.end = end_pts[i]
+                    axis.update_plot()
