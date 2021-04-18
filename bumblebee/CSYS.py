@@ -2,10 +2,24 @@ from bumblebee.Frame import Frame
 from bumblebee.RigidBody import RigidBody
 from bumblebee.RigidCollection import RigidCollection
 
-from ipywidgets import HBox, Layout
+from IPython.display import display
+from ipywidgets import HBox, Layout, Output
 from ipytree import Tree, Node
-import plotly.graph_objects as go
+from matplotlib import pyplot as plt
+from matplotlib import rc
 import json, re
+import numpy as np
+from copy import deepcopy
+import pickle
+import io
+
+#sets matplotlib to run as widget if in jupyter env
+ipython = True
+try:
+    get_ipython().magic('matplotlib widget')
+except:
+    ipython = False
+    pass
 
 class CSYS:
     """
@@ -19,19 +33,66 @@ class CSYS:
         Set default plot layout, add part tree,
         add plot (fig)
         """
-        
-        self.layout = go.Layout(
-            scene = dict(aspectmode='data'),
-            scene_xaxis_visible=False,
-            scene_yaxis_visible=False,
-            scene_zaxis_visible=False,
-            showlegend=False
-        )
 
         self.tree = Tree()
-        self.fig = go.FigureWidget(layout=self.layout)
+        
+        self.new_fig()
         
         self.add(Frame(name="Origin"))
+
+    def new_fig(self):
+
+        old_fig = getattr(self, 'fig', None)
+        self.fig = None
+
+        # catch jupyter output from creating figure
+        if ipython:
+            output = Output()
+            with output:
+                self.fig = plt.figure(figsize=(8,8))
+        else:
+            self.fig = plt.figure()
+
+        # catch the current interactive plot
+        self.output = Output()
+
+        plt.axis('off')
+        plt.margins(0, x=None, y=None, tight=True)
+        rc('axes',edgecolor=(1,1,1,0))
+
+        old_ax = getattr(self, 'ax', None)
+        self.ax = self.fig.add_subplot(111, projection='3d')
+
+        if old_fig is not None:
+            self.fig.canvas.toolbar_visible = old_fig.canvas.toolbar_visible
+            self.fig.canvas.header_visible = old_fig.canvas.header_visible
+            self.fig.canvas.footer_visible = old_fig.canvas.footer_visible
+        else:
+            self.fig.canvas.toolbar_visible = False
+            self.fig.canvas.header_visible = False
+            self.fig.canvas.footer_visible = False
+
+        if old_ax is not None:
+            self.ax.set_position(old_ax.get_position())
+            self.ax.grid(old_ax.grid)
+            self.ax.xaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
+            self.ax.yaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
+            self.ax.zaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
+            self.ax.set_xticks([])
+            self.ax.set_yticks([])
+            self.ax.set_zticks([])
+            self.ax.set_xlim(old_ax.get_xlim())
+            self.ax.set_ylim(old_ax.get_ylim())
+            self.ax.set_zlim(old_ax.get_zlim())
+        else:
+            self.ax.set_position([0,0,1,1])
+            self.ax.grid(False)
+            self.ax.xaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
+            self.ax.yaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
+            self.ax.zaxis.set_pane_color((1.0, 1.0, 1.0, 0.0))
+            self.ax.set_xticks([])
+            self.ax.set_yticks([])
+            self.ax.set_zticks([])
 
     def add(self, plot_obj):
         """
@@ -40,7 +101,8 @@ class CSYS:
         to the plot so that it automatically updates.
         """
         self.tree.add_node(plot_obj)
-        plot_obj.bind(self.fig)
+        plot_obj.bind(self)
+        plot_obj.plot(self.ax)
 
     def save(self, path):
         data = {}
@@ -77,8 +139,25 @@ class CSYS:
             plot_obj.opened = False #collapse the tree
             self.add(plot_obj)
 
-    def plot(self):
+    def update(self):
+
+        self.fig.canvas.draw_idle()
+
+    def copy_fig(self):
+        buf = io.BytesIO()
+        pickle.dump(self.fig, buf)
+        buf.seek(0)
+        self.fig = pickle.load(buf) 
+
+    def plot(self, new=True):
         """
         Returns a widget of the part tree and 3D figure combined.
         """
-        return HBox([self.tree, self.fig])
+
+        if new:
+            self.new_fig()
+            for node in self.tree.nodes:
+                node.plot(self.ax)
+                node.update()
+
+        return HBox([self.tree, self.fig.canvas])

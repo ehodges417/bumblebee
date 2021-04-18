@@ -1,6 +1,8 @@
 import math
 import pint
 import numpy as np
+from mpl_toolkits import mplot3d
+import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 import modern_robotics as mr
 from stl.mesh import Mesh
@@ -8,6 +10,7 @@ from ipytree import Node
 
 from bumblebee.Frame import Frame
 from bumblebee.PlotObj import PlotObj
+from numba import njit
 
 class RigidBody(PlotObj):
     """
@@ -24,7 +27,7 @@ class RigidBody(PlotObj):
         return body
 
     def __init__(self, path, units='mm', name='RigidBody', body_frame:Frame = None, visible=True):
-        self.init_points(Mesh.from_file(path))
+        self.mesh = Mesh.from_file(path)
         self.path = path
         self.name = name
         self.units = pint.Unit(units)
@@ -34,15 +37,6 @@ class RigidBody(PlotObj):
         self.body_frame = body_frame if body_frame else Frame(name='Body Frame')        
         self.add_node(self.body_frame)
 
-    def init_points(self, mesh):
-        self.pts = np.vstack((
-            np.concatenate(mesh.x),
-            np.concatenate(mesh.y),
-            np.concatenate(mesh.z),
-            np.ones(mesh.x.size)
-        ))
-        self.num_pts = mesh.vectors.shape[0]*3
-
     @property
     def tf(self):
         return self.body_frame.tf
@@ -51,12 +45,14 @@ class RigidBody(PlotObj):
     def tf(self, value):
         self.body_frame.tf = value
 
-    def bind(self, figure):
-        figure.add_trace(self.plot_body())
-        self.trace = figure.data[-1]
+    def bind(self, csys, parent=True):
+        self.csys = csys
 
         for frame in self.nodes:
-            frame.bind(figure)
+            frame.bind(csys, parent=False)
+
+        if parent:
+            self.csys.update()
 
     def to_dict(self):
         return {
@@ -95,79 +91,83 @@ class RigidBody(PlotObj):
 
         return newbody
 
+    @PlotObj.tree_update
     def translate(self, translation):
 
         # translate attached frames
         for frame in self.nodes:
-            frame.translate(translation)
+            frame.translate(translation, inner=True)
 
-        self.update_plot()
+        # TODO more elegant workaround
+        if hasattr(self, 'parent'):
+            self.parent.init_rel_pose([self])
 
+    @PlotObj.tree_update
     def _rotate(self, R, about='origin', sweep=False):
         for frame in self.nodes:
-            frame._rotate(R, about, sweep)
+            frame._rotate(R, about, sweep, inner=True)
 
-        self.update_plot()
+        # TODO more elegant workaround
+        if hasattr(self, 'parent'):
+            self.parent.init_rel_pose([self])
 
+    @PlotObj.tree_update
     def transform(self, matrix):
 
         # translate attached frames
         for frame in self.nodes:
-            frame.transform(matrix)
+            frame.transform(matrix, inner=True)
 
-        self.update_plot()
+        # TODO more elegant workaround
+        if hasattr(self, 'parent'):
+            self.parent.init_rel_pose([self])
 
     def add_frame(self, frame:Frame):
         self.add_node(frame)
 
-    def plot_body(self, colorscale=None):
+    def plot(self, ax):
+        self.plot_body(ax)
 
-        pts = self.body_frame.tf @ self.pts
+        for frame in self.nodes:
+            frame.plot(ax)
 
-        trace = go.Mesh3d(
-            x=pts[0],
-            y=pts[1],
-            z=pts[2],
-            colorscale=colorscale if colorscale else ([0, 'rgb(153, 153, 153)'], [1., 'rgb(255,255,255)']), 
-            intensity= pts[2],
-            flatshading=True,
-            i = list(range(0,self.num_pts,3)),
-            j = list(range(1,self.num_pts,3)),
-            k = list(range(2,self.num_pts,3)),
-            name=self.name,
-            showscale=False,
-            lighting=dict(ambient=0.18, diffuse=1, fresnel=0.1, specular=1, roughness=0.05, facenormalsepsilon=1e-15,
-                                vertexnormalsepsilon=1e-15),
-        )
+    @staticmethod
+    @njit
+    def get_triangles(vectors, tf):
+        new_ts=[]
+        for i in range(len(vectors)):
+            new_t = np.ones((4,3))
+            new_t[0:3,0:3] = vectors[i].T
+            new_t = (tf @ new_t).T
+            new_ts.append(new_t[:,0:3])
 
-        trace.visible = self.visible
-        return trace
+        return new_ts
+
+    def plot_body(self, ax, colorscale=None):
+
+        new_ts = self.get_triangles(self.mesh.vectors, self.body_frame.tf)
+
+        if self.visible:
+            self.trace = ax.add_collection3d(mplot3d.art3d.Poly3DCollection(new_ts, edgecolors='Black', facecolors = 'Grey', linewidths=0.1, alpha=0.2))
+        # TODO wireframe
+        # ax.add_collection3d(mplot3d.art3d.Line3DCollection(new_ts, edgecolors='Black'))
     
+    @PlotObj.bound_update
     def set_vis(self, vis):
         self.visible = vis
-
-        if vis:
-            self.update_mesh()
+        if hasattr(self, 'trace'):
+            self.trace._visible = vis
 
         # set visiblity of attached frames
         for frame in self.nodes:
-            frame.set_vis(vis)
+            frame.set_vis(vis, inner=True)
 
-        # set visibility of body mesh
-        if hasattr(self, 'trace'):
-            self.trace.visible = vis
-
-    def update_mesh(self):
-        if self.visible:
-            if hasattr(self, 'trace'):
-                pts = self.body_frame.tf @ self.pts
-                self.trace.x = list(pts[0])
-                self.trace.y = list(pts[1])
-                self.trace.z = list(pts[2])
-
-    def update_plot(self):
-        
-        self.update_mesh()
+    @PlotObj.bound_update
+    def update(self):
 
         for frame in self.nodes:
-            frame.update_plot()
+            frame.update(inner=True)
+
+        if hasattr(self, 'trace'):
+            self.trace.remove()
+            self.plot_body(self.csys.ax)

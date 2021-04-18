@@ -82,8 +82,13 @@ class ToolTab:
         self.parent = parent
         self.toggle_vis_btn = Button(description='Toggle-Vis')
         self.toggle_vis_btn.on_click(self.toggle_vis)
+        self.refresh_btn = Button(description='Refresh')
+        self.refresh_btn.on_click(self.refresh)
 
-        self.grid = self.toggle_vis_btn
+        self.grid = HBox([self.toggle_vis_btn, self.refresh_btn])
+
+    def refresh(self, b):
+        self.parent.parent.csys.update()
 
     def toggle_vis(self, b):
 

@@ -15,6 +15,8 @@ setuptools.setup(
         'plotly',
         'scipy',
         'ipytree',
+        'matplotlib',
+        'ipympl'
     ],
     extras_require = {
         'tutorials':  ["jupyter"]

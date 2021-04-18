@@ -28,7 +28,7 @@ class PlotObj(Node):
         self.visible = visible #default to visible in plot
 
     def set_vis(self, vis): raise Exception('set_vis method not overriden in child class!')
-    def bind(self, figure): raise Exception('bind method not overriden in child class!')
+    # def bind(self, figure): raise Exception('bind method not overriden in child class!')
     def to_dict(self): raise Exception('to_dict method not overriden in child class!')
     def plot(self): raise Exception('plot method not overriden in child class!')  
 
@@ -59,9 +59,23 @@ class PlotObj(Node):
             f.write(text)
             f.truncate()
 
-    # Think this is handled by node class
-    # def __hash__(self):
-    #     return hash(self.uid)
+    @staticmethod
+    def tree_update(func):
+        """
+        decorator for recursive PlotObj methods, ensures that update
+        is only called on the outermost level to reduce number of
+        times the plot is re-rendered
+        """
+        def wrapper(self, *args, inner=False):
+            func(self, *args)
+            if not inner:
+                self.update(inner=inner)
+        return wrapper
 
-    # def __eq__(self, other):
-    #     return self.__class__ == other.__class__ and self.uid == other.uid
+    @staticmethod
+    def bound_update(func):
+        def wrapper(self, *args, inner=False):
+            func(self, *args)
+            if (not inner) and hasattr(self, 'csys'):
+                self.csys.update()
+        return wrapper

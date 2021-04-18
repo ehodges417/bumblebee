@@ -1,5 +1,5 @@
 import numpy as np
-import plotly.graph_objects as go
+from matplotlib import pyplot as plt
 
 from bumblebee.PlotObj import PlotObj
 from ipytree import Node
@@ -29,30 +29,16 @@ class Axis(PlotObj):
 
         PlotObj.__init__(self, visible=visible, name=name, icon='line')
 
-    def bind(self, figure):
-        figure.add_trace(self.plot())
-        self.trace = figure.data[-1]
-
     def to_dict(self):
         pass
 
-    def plot(self):
+    def plot(self, ax):
         x,y,z = zip(self.start, self.end)
-        marker = dict(size=1, color=self.color)
-        line = dict(color=self.color, width=self.linewidth)
-        trace = go.Scatter3d(x=x, y=y, z=z, marker=marker, line=line)
-        trace.visible = self.visible
-        return trace
+        if self.visible:
+            self.trace, = ax.plot(x, y, z, self.color)
 
+    @PlotObj.bound_update
     def set_vis(self, vis):
-        self.visable = vis
+        self.visible = vis
         if hasattr(self, 'trace'):
-            self.trace.visible = vis
-
-    def update_plot(self):
-        x,y,z = zip(self.start, self.end)
-
-        if hasattr(self, 'trace'):
-            self.trace.x = list(x)
-            self.trace.y = list(y)
-            self.trace.z = list(z)
+            self.trace._visible=vis

@@ -19,9 +19,9 @@ class Frame(PlotObj):
         self, 
         tf:np.array = np.eye(4),
         name:str = 'Frame',
-        xcolor:str = 'rgb(128,0,0)',
-        ycolor:str = 'rgb(0,128,0)',
-        zcolor:str = 'rgb(0,0,128)',
+        xcolor:str = 'r',
+        ycolor:str = 'g',
+        zcolor:str = 'b',
         linewidth = 6,
         scale = 1,
         visible=True
@@ -47,9 +47,11 @@ class Frame(PlotObj):
         Rt = self.tf[0:3,0:3].T
         return np.r_[np.c_[Rt, -np.dot(Rt, self.tf[0:3,3])], [[0, 0, 0, 1]]]
 
-    def bind(self, figure):
-        for axis in self.axes:
-            axis.bind(figure)
+    def bind(self, csys, parent=True):
+        self.csys = csys
+
+        if parent:
+            self.csys.update()
 
     def to_dict(self):
         return {
@@ -61,13 +63,17 @@ class Frame(PlotObj):
             'scale': self.scale,
         }
 
+    @PlotObj.tree_update
     def translate(self, translation):
         self.tf[0,3] += translation[0]
         self.tf[1,3] += translation[1]
         self.tf[2,3] += translation[2]
 
-        self.update_plot()
+        # TODO more elegant workaround
+        if hasattr(self, 'parent'):
+            self.parent.init_rel_pose([self])
 
+    @PlotObj.bound_update
     def _rotate(self, R, about='origin', sweep=False):
 
         if about == 'origin':
@@ -78,14 +84,18 @@ class Frame(PlotObj):
         elif about == 'body':
             # use body as reference for x, y, z
             self.tf[0:3, 0:3] = self.tf[0:3, 0:3] @ R.as_matrix()
-        
 
-        self.update_plot()
+        # TODO more elegant workaround
+        if hasattr(self, 'parent'):
+            self.parent.init_rel_pose([self])
 
+    @PlotObj.tree_update
     def transform(self, transform):
         self.tf = self.tf @ transform
 
-        self.update_plot()
+        # TODO more elegant workaround
+        if hasattr(self, 'parent'):
+            self.parent.init_rel_pose([self])
 
     def axis_pts(self):
         origin = self.tf[0:3,3]
@@ -95,22 +105,21 @@ class Frame(PlotObj):
 
         return origin, [x_end, y_end, z_end]
 
-    def plot(self):
-        return [axis.plot() for axis in self.axes]
-    
-    def set_vis(self, vis):
-        self.visable = vis
-        if vis:
-            self.update_plot()
+    def plot(self, ax):
         for axis in self.axes:
-            axis.set_vis(vis)
+            axis.plot(ax)
+    
+    @PlotObj.tree_update
+    def set_vis(self, vis):
+        self.visible = vis
+        for axis in self.axes:
+            axis.set_vis(vis, inner=True)
 
-    def update_plot(self):
-        if self.visible:
-            origin, end_pts = self.axis_pts()
+    @PlotObj.bound_update
+    def update(self):
+        origin, end_pts = self.axis_pts()
         
-            for i, axis in enumerate(self.axes):
-                if hasattr(axis, 'trace'):
-                    axis.start = origin
-                    axis.end = end_pts[i]
-                    axis.update_plot()
+        for i, axis in enumerate(self.axes):
+
+            if hasattr(axis, 'trace'):
+                axis.trace._verts3d = tuple(pt for pt in np.vstack((origin, end_pts[i])).T)

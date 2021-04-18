@@ -45,20 +45,28 @@ class RigidCollection(PlotObj):
     @tf.setter
     def tf(self, value):
         self.body_frame.tf = value
+        self.update()
 
-    def bind(self, figure):
-
+    def bind(self, csys, parent=True):
+        self.csys = csys
         for plot_obj in self.nodes:
-            plot_obj.bind(figure)
+            plot_obj.bind(csys, parent=False)
+
+        if parent:
+            self.csys.update()   
 
     def add(self, plot_obj):
         self.add_node(plot_obj)
+        if hasattr(self, 'csys'):
+            plot_obj.bind(self.csys, parent=False)
+            plot_obj.plot(self.csys.ax)
         self.init_rel_pose([plot_obj])
 
     def init_rel_pose(self, nodes):
         inv = self.body_frame.inv_tf.copy()
         for node in nodes:
             self.rel_pose[node] = inv @ node.tf
+            node.parent = self
 
     def to_dict(self):
         return {
@@ -75,32 +83,45 @@ class RigidCollection(PlotObj):
             new_collection.name = name
         return new_collection
 
-    def translate(self, translation):
-        
-        self.body_frame.translate(translation)
-        self.update_plot()
+    @PlotObj.tree_update
+    def translate(self, translation):        
+        self.body_frame.translate(translation, inner=True)
 
+        # TODO more elegant workaround
+        if hasattr(self, 'parent'):
+            self.parent.init_rel_pose([self])
+
+    @PlotObj.tree_update
     def _rotate(self, R, about, sweep):
+        self.body_frame._rotate(R, about, sweep, inner=True)
 
-        self.body_frame._rotate(R, about, sweep)
-        self.update_plot()
+        # TODO more elegant workaround
+        if hasattr(self, 'parent'):
+            self.parent.init_rel_pose([self])
 
+    @PlotObj.tree_update
     def transform(self, matrix):
+        self.body_frame.transform(matrix, inner=True)
 
-        self.body_frame.transform(matrix)
-        self.update_plot()
+        # TODO more elegant workaround
+        if hasattr(self, 'parent'):
+            self.parent.init_rel_pose([self])
 
-    def update_plot(self):
+    @PlotObj.bound_update
+    def update(self, inner=False):
 
         for node in self.nodes[1:]:
-            if node.visible:
-                node.tf = self.body_frame.tf @ self.rel_pose[node]
-                node.update_plot()
+            node.tf = self.body_frame.tf @ self.rel_pose[node]
+            node.update(inner=True)
 
-        self.body_frame.update_plot()
+        self.body_frame.update(inner=True)
 
+    def plot(self, ax):
+        for node in self.nodes:
+            node.plot(ax)
+     
+    @PlotObj.bound_update
     def set_vis(self, vis):
-        self.visibility = vis
+        self.visible = vis
         for plot_obj in self.nodes:
-            plot_obj.set_vis(vis)
-        self.update_plot()
+            plot_obj.set_vis(vis, inner=True)
