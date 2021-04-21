@@ -108,13 +108,12 @@ class RigidCollection(PlotObj):
             self.parent.init_rel_pose([self])
 
     @PlotObj.bound_update
-    def update(self, inner=False):
+    def update(self):
 
-        for node in self.nodes[1:]:
-            node.tf = self.body_frame.tf @ self.rel_pose[node]
+        for node in self.nodes:
+            if not node == self.body_frame:
+                node.tf = self.body_frame.tf @ self.rel_pose[node]
             node.update(inner=True)
-
-        self.body_frame.update(inner=True)
 
     def plot(self, ax):
         for node in self.nodes:

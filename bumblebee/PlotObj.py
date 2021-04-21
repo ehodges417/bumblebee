@@ -74,7 +74,11 @@ class PlotObj(Node):
 
     @staticmethod
     def bound_update(func):
-        def wrapper(self, *args, inner=False):
+        def wrapper(self, *args, inner=True):
+            # print('----------')
+            # print(self.name)
+            # print(func)
+            # print(inner)
             func(self, *args)
             if (not inner) and hasattr(self, 'csys'):
                 self.csys.update()

@@ -120,6 +120,5 @@ class Frame(PlotObj):
         origin, end_pts = self.axis_pts()
         
         for i, axis in enumerate(self.axes):
-
             if hasattr(axis, 'trace'):
                 axis.trace._verts3d = tuple(pt for pt in np.vstack((origin, end_pts[i])).T)
